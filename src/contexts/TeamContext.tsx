@@ -1,6 +1,4 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { collection, addDoc, onSnapshot, query, where, updateDoc, doc } from 'firebase/firestore';
-import { db, auth } from '../firebase';
 
 interface Team {
   id: string;
@@ -14,11 +12,11 @@ interface Team {
 interface TeamContextType {
   teams: Team[];
   currentTeam: Team | null;
-  createTeam: (name: string) => Promise<void>;
-  joinTeam: (teamId: string) => Promise<void>;
-  leaveTeam: () => Promise<void>;
-  updateTeamScore: (score: number) => Promise<void>;
-  setTeamPlaying: (isPlaying: boolean) => Promise<void>;
+  createTeam: (name: string) => void;
+  joinTeam: (teamId: string) => void;
+  leaveTeam: () => void;
+  updateTeamScore: (score: number) => void;
+  setTeamPlaying: (isPlaying: boolean) => void;
 }
 
 const TeamContext = createContext<TeamContextType | null>(null);
@@ -32,118 +30,112 @@ export const useTeam = () => {
 };
 
 export const TeamProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [currentTeam, setCurrentTeam] = useState<Team | null>(null);
+  const [teams, setTeams] = useState<Team[]>(() => {
+    const savedTeams = localStorage.getItem('teams');
+    return savedTeams ? JSON.parse(savedTeams) : [];
+  });
+  
+  const [currentTeam, setCurrentTeam] = useState<Team | null>(() => {
+    const savedCurrentTeam = localStorage.getItem('currentTeam');
+    return savedCurrentTeam ? JSON.parse(savedCurrentTeam) : null;
+  });
 
+  // Teams değiştiğinde localStorage'ı güncelle
   useEffect(() => {
-    if (!auth.currentUser) return;
+    localStorage.setItem('teams', JSON.stringify(teams));
+  }, [teams]);
 
-    // Takımları dinle
-    const q = query(collection(db, 'teams'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const teamsData: Team[] = [];
-      snapshot.forEach((doc) => {
-        teamsData.push({ id: doc.id, ...doc.data() } as Team);
-      });
-      setTeams(teamsData);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
+  // CurrentTeam değiştiğinde localStorage'ı güncelle
   useEffect(() => {
-    if (!auth.currentUser) return;
+    localStorage.setItem('currentTeam', JSON.stringify(currentTeam));
+  }, [currentTeam]);
 
-    // Kullanıcının takımını dinle
-    const q = query(
-      collection(db, 'teams'),
-      where('members', 'array-contains', auth.currentUser.uid)
-    );
-    
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      if (!snapshot.empty) {
-        const docData = snapshot.docs[0].data();
-        setCurrentTeam({
-          id: snapshot.docs[0].id,
-          name: docData.name,
-          members: docData.members,
-          score: docData.score,
-          isPlaying: docData.isPlaying,
-          createdBy: docData.createdBy
-        });
-      } else {
-        setCurrentTeam(null);
-      }
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  const createTeam = async (name: string) => {
-    if (!auth.currentUser) return;
-
-    const teamRef = await addDoc(collection(db, 'teams'), {
+  const createTeam = (name: string) => {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    const newTeam: Team = {
+      id: Date.now().toString(),
       name,
-      members: [auth.currentUser.uid],
+      members: [user.displayName],
       score: 0,
       isPlaying: false,
-      createdBy: auth.currentUser.uid,
-      createdAt: new Date()
-    });
+      createdBy: user.displayName
+    };
 
-    setCurrentTeam({
-      id: teamRef.id,
-      name,
-      members: [auth.currentUser.uid],
-      score: 0,
-      isPlaying: false,
-      createdBy: auth.currentUser.uid
-    });
+    setTeams(prevTeams => [...prevTeams, newTeam]);
+    setCurrentTeam(newTeam);
   };
 
-  const joinTeam = async (teamId: string) => {
-    if (!auth.currentUser) return;
-
-    const teamRef = doc(db, 'teams', teamId);
-    const team = teams.find(t => t.id === teamId);
-    
-    if (team && !team.isPlaying) {
-      await updateDoc(teamRef, {
-        members: [...team.members, auth.currentUser.uid]
-      });
-    }
-  };
-
-  const leaveTeam = async () => {
-    if (!auth.currentUser || !currentTeam) return;
-
-    const teamRef = doc(db, 'teams', currentTeam.id);
-    const updatedMembers = currentTeam.members.filter(
-      memberId => memberId !== auth.currentUser?.uid
+  const joinTeam = (teamId: string) => {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    setTeams(prevTeams => 
+      prevTeams.map(team => {
+        if (team.id === teamId && !team.members.includes(user.displayName)) {
+          const updatedTeam = {
+            ...team,
+            members: [...team.members, user.displayName]
+          };
+          setCurrentTeam(updatedTeam);
+          return updatedTeam;
+        }
+        return team;
+      })
     );
+  };
 
-    if (updatedMembers.length === 0) {
-      // Takımda kimse kalmadıysa takımı sil
-      await updateDoc(teamRef, { isDeleted: true });
-    } else {
-      await updateDoc(teamRef, { members: updatedMembers });
-    }
-
+  const leaveTeam = () => {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    setTeams(prevTeams => 
+      prevTeams.map(team => {
+        if (team.id === currentTeam?.id) {
+          const updatedMembers = team.members.filter(member => member !== user.displayName);
+          if (updatedMembers.length === 0) {
+            return team;
+          }
+          return {
+            ...team,
+            members: updatedMembers
+          };
+        }
+        return team;
+      })
+    );
     setCurrentTeam(null);
   };
 
-  const updateTeamScore = async (score: number) => {
+  const updateTeamScore = (score: number) => {
     if (!currentTeam) return;
 
-    const teamRef = doc(db, 'teams', currentTeam.id);
-    await updateDoc(teamRef, { score });
+    setTeams(prevTeams => 
+      prevTeams.map(team => {
+        if (team.id === currentTeam.id) {
+          const updatedTeam = {
+            ...team,
+            score
+          };
+          setCurrentTeam(updatedTeam);
+          return updatedTeam;
+        }
+        return team;
+      })
+    );
   };
 
-  const setTeamPlaying = async (isPlaying: boolean) => {
+  const setTeamPlaying = (isPlaying: boolean) => {
     if (!currentTeam) return;
 
-    const teamRef = doc(db, 'teams', currentTeam.id);
-    await updateDoc(teamRef, { isPlaying });
+    setTeams(prevTeams => 
+      prevTeams.map(team => {
+        if (team.id === currentTeam.id) {
+          const updatedTeam = {
+            ...team,
+            isPlaying
+          };
+          setCurrentTeam(updatedTeam);
+          return updatedTeam;
+        }
+        return team;
+      })
+    );
   };
 
   return (

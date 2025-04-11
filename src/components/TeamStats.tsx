@@ -3,181 +3,98 @@ import styled from 'styled-components';
 import { useStats } from '../contexts/StatsContext';
 
 const StatsContainer = styled.div`
-  background: white;
+  background-color: #f5f5f5;
+  padding: 20px;
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  padding: 1.5rem;
-  margin-top: 1rem;
+  margin-bottom: 20px;
 `;
 
-const StatsTitle = styled.h3`
+const StatsTitle = styled.h2`
+  font-size: 20px;
   color: #333;
-  margin-bottom: 1rem;
-  text-align: center;
+  margin-bottom: 16px;
 `;
 
-const StatGrid = styled.div`
+const StatsList = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 1rem;
-  margin-bottom: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
 `;
 
 const StatCard = styled.div`
-  background: #f8f9fa;
-  padding: 1rem;
-  border-radius: 6px;
-  text-align: center;
-`;
-
-const StatValue = styled.div`
-  font-size: 1.5rem;
-  color: #4CAF50;
-  font-weight: bold;
-  margin-bottom: 0.5rem;
+  background-color: white;
+  padding: 16px;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 `;
 
 const StatLabel = styled.div`
+  font-size: 14px;
   color: #666;
-  font-size: 0.9rem;
+  margin-bottom: 8px;
 `;
 
-const CategoryStats = styled.div`
-  margin-top: 1.5rem;
-`;
-
-const CategoryTitle = styled.h4`
-  color: #333;
-  margin-bottom: 1rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid #eee;
-`;
-
-const ProgressBar = styled.div<{ progress: number }>`
-  width: 100%;
-  height: 8px;
-  background: #eee;
-  border-radius: 4px;
-  margin-top: 0.5rem;
-  position: relative;
-  overflow: hidden;
-
-  &::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    height: 100%;
-    width: ${props => props.progress}%;
-    background: #4CAF50;
-    border-radius: 4px;
-    transition: width 0.3s ease;
-  }
-`;
-
-const CategoryRow = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-`;
-
-const CategoryInfo = styled.div`
-  flex: 1;
-`;
-
-const CategoryName = styled.div`
+const StatValue = styled.div`
+  font-size: 24px;
+  color: #007bff;
   font-weight: bold;
-  color: #333;
 `;
 
-const CategoryDetails = styled.div`
-  color: #666;
-  font-size: 0.9rem;
-  margin-top: 0.25rem;
-`;
-
-const LoadingMessage = styled.div`
+const NoStatsMessage = styled.div`
   text-align: center;
-  padding: 2rem;
+  padding: 20px;
   color: #666;
+  font-style: italic;
 `;
 
 const TeamStats: React.FC = () => {
-  const { teamStats, isLoading } = useStats();
+  const { stats } = useStats();
 
-  if (isLoading) {
+  if (stats.length === 0) {
     return (
       <StatsContainer>
-        <LoadingMessage>İstatistikler yükleniyor...</LoadingMessage>
+        <StatsTitle>Takım İstatistikleri</StatsTitle>
+        <NoStatsMessage>
+          Henüz istatistik bulunmuyor. Bir düello oynayarak istatistik oluşturun.
+        </NoStatsMessage>
       </StatsContainer>
     );
   }
 
-  if (!teamStats) {
-    return (
-      <StatsContainer>
-        <LoadingMessage>İstatistik bulunamadı.</LoadingMessage>
-      </StatsContainer>
-    );
-  }
-
-  const getCategoryName = (id: string): string => {
-    const categories: { [key: string]: string } = {
-      'general': 'Genel Kültür',
-      'science': 'Bilim & Teknoloji',
-      'history': 'Tarih',
-      'geography': 'Coğrafya',
-      'sports': 'Spor',
-      'arts': 'Sanat & Edebiyat'
-    };
-    return categories[id] || 'Bilinmeyen Kategori';
-  };
+  const totalCorrectAnswers = stats.reduce((sum, stat) => sum + stat.correctAnswers, 0);
+  const totalWrongAnswers = stats.reduce((sum, stat) => sum + stat.wrongAnswers, 0);
+  const totalAnswers = totalCorrectAnswers + totalWrongAnswers;
+  const averageAccuracy = totalAnswers > 0 
+    ? Math.round((totalCorrectAnswers / totalAnswers) * 100) 
+    : 0;
+  const highestScore = Math.max(...stats.map(stat => stat.highestScore));
+  const averageTime = stats.reduce((sum, stat) => sum + stat.averageTime, 0) / stats.length;
 
   return (
     <StatsContainer>
       <StatsTitle>Takım İstatistikleri</StatsTitle>
-      
-      <StatGrid>
+      <StatsList>
         <StatCard>
-          <StatValue>{teamStats.totalGames}</StatValue>
-          <StatLabel>Toplam Oyun</StatLabel>
+          <StatLabel>Toplam Doğru Cevap</StatLabel>
+          <StatValue>{totalCorrectAnswers}</StatValue>
         </StatCard>
         <StatCard>
-          <StatValue>{teamStats.totalScore}</StatValue>
-          <StatLabel>Toplam Puan</StatLabel>
+          <StatLabel>Toplam Yanlış Cevap</StatLabel>
+          <StatValue>{totalWrongAnswers}</StatValue>
         </StatCard>
         <StatCard>
-          <StatValue>{teamStats.winStreak}</StatValue>
-          <StatLabel>Kazanma Serisi</StatLabel>
+          <StatLabel>Doğruluk Oranı</StatLabel>
+          <StatValue>%{averageAccuracy}</StatValue>
         </StatCard>
         <StatCard>
-          <StatValue>{teamStats.bestWinStreak}</StatValue>
-          <StatLabel>En İyi Seri</StatLabel>
+          <StatLabel>En Yüksek Skor</StatLabel>
+          <StatValue>{highestScore}</StatValue>
         </StatCard>
-      </StatGrid>
-
-      <CategoryStats>
-        <CategoryTitle>Kategori Bazlı Performans</CategoryTitle>
-        {Object.entries(teamStats.categories).map(([categoryId, stats]) => {
-          const correctPercentage = stats.totalQuestions > 0
-            ? (stats.correctAnswers / stats.totalQuestions) * 100
-            : 0;
-
-          return (
-            <CategoryRow key={categoryId}>
-              <CategoryInfo>
-                <CategoryName>{getCategoryName(categoryId)}</CategoryName>
-                <CategoryDetails>
-                  {stats.correctAnswers} doğru / {stats.totalQuestions} soru
-                  {stats.averageTime > 0 && ` • Ort. ${stats.averageTime.toFixed(1)} saniye`}
-                </CategoryDetails>
-                <ProgressBar progress={correctPercentage} />
-              </CategoryInfo>
-            </CategoryRow>
-          );
-        })}
-      </CategoryStats>
+        <StatCard>
+          <StatLabel>Ortalama Süre</StatLabel>
+          <StatValue>{averageTime.toFixed(1)} sn</StatValue>
+        </StatCard>
+      </StatsList>
     </StatsContainer>
   );
 };

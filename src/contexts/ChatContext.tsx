@@ -1,6 +1,4 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { collection, addDoc, onSnapshot, query, where, orderBy, limit } from 'firebase/firestore';
-import { db, auth } from '../firebase';
 
 interface Message {
   id: string;
@@ -13,7 +11,7 @@ interface Message {
 
 interface ChatContextType {
   messages: Message[];
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (content: string) => void;
   isLoading: boolean;
 }
 
@@ -31,42 +29,31 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; teamId: string 
   children, 
   teamId 
 }) => {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [messages, setMessages] = useState<Message[]>(() => {
+    const savedMessages = localStorage.getItem(`messages_${teamId}`);
+    return savedMessages ? JSON.parse(savedMessages) : [];
+  });
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    if (!teamId) return;
+    localStorage.setItem(`messages_${teamId}`, JSON.stringify(messages));
+  }, [messages, teamId]);
 
-    // Son 50 mesajı getir ve gerçek zamanlı dinle
-    const q = query(
-      collection(db, 'messages'),
-      where('teamId', '==', teamId),
-      orderBy('timestamp', 'desc'),
-      limit(50)
-    );
+  const sendMessage = (content: string) => {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    
+    if (!content.trim()) return;
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const messagesData: Message[] = [];
-      snapshot.forEach((doc) => {
-        messagesData.push({ id: doc.id, ...doc.data() } as Message);
-      });
-      setMessages(messagesData.reverse()); // En eski mesaj en üstte olacak şekilde sırala
-      setIsLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [teamId]);
-
-  const sendMessage = async (content: string) => {
-    if (!auth.currentUser || !teamId || !content.trim()) return;
-
-    await addDoc(collection(db, 'messages'), {
+    const newMessage: Message = {
+      id: Date.now().toString(),
       teamId,
-      userId: auth.currentUser.uid,
-      userName: auth.currentUser.displayName || 'Anonim',
+      userId: user.displayName,
+      userName: user.displayName,
       content: content.trim(),
       timestamp: new Date()
-    });
+    };
+
+    setMessages(prevMessages => [...prevMessages, newMessage]);
   };
 
   return (

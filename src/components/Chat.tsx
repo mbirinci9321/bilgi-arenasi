@@ -1,106 +1,75 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
 import { useChat } from '../contexts/ChatContext';
-import { auth } from '../firebase';
 
 const ChatContainer = styled.div`
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   display: flex;
   flex-direction: column;
-  height: 400px;
-  width: 100%;
+  height: 100%;
+  background-color: #f5f5f5;
+  border-radius: 8px;
+  padding: 16px;
 `;
 
 const MessagesContainer = styled.div`
-  flex: 1;
+  flex-grow: 1;
   overflow-y: auto;
-  padding: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-
-  &::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  &::-webkit-scrollbar-track {
-    background: #f1f1f1;
-  }
-
-  &::-webkit-scrollbar-thumb {
-    background: #888;
-    border-radius: 3px;
-  }
+  margin-bottom: 16px;
 `;
 
-const MessageBubble = styled.div<{ isOwnMessage: boolean }>`
-  background: ${props => props.isOwnMessage ? '#4CAF50' : '#f1f1f1'};
-  color: ${props => props.isOwnMessage ? 'white' : '#333'};
-  padding: 0.5rem 1rem;
-  border-radius: 16px;
+const MessageBubble = styled.div<{ isCurrentUser: boolean }>`
+  background-color: ${props => props.isCurrentUser ? '#007bff' : '#e9ecef'};
+  color: ${props => props.isCurrentUser ? 'white' : 'black'};
+  padding: 8px 12px;
+  border-radius: 12px;
+  margin: 4px 0;
   max-width: 70%;
-  align-self: ${props => props.isOwnMessage ? 'flex-end' : 'flex-start'};
+  align-self: ${props => props.isCurrentUser ? 'flex-end' : 'flex-start'};
   word-wrap: break-word;
 `;
 
-const MessageInfo = styled.div<{ isOwnMessage: boolean }>`
-  font-size: 0.8rem;
-  color: #666;
-  margin-bottom: 0.2rem;
-  text-align: ${props => props.isOwnMessage ? 'right' : 'left'};
-`;
-
-const InputContainer = styled.form`
-  display: flex;
-  gap: 0.5rem;
-  padding: 1rem;
-  border-top: 1px solid #eee;
-`;
-
-const Input = styled.input`
-  flex: 1;
-  padding: 0.5rem;
+const MessageInput = styled.input`
+  padding: 8px;
   border: 1px solid #ddd;
   border-radius: 4px;
-  font-size: 1rem;
-
-  &:focus {
-    outline: none;
-    border-color: #4CAF50;
-  }
+  margin-right: 8px;
+  flex-grow: 1;
 `;
 
 const SendButton = styled.button`
-  padding: 0.5rem 1rem;
-  background: #4CAF50;
+  padding: 8px 16px;
+  background-color: #007bff;
   color: white;
   border: none;
   border-radius: 4px;
   cursor: pointer;
-  transition: background 0.3s ease;
 
   &:hover {
-    background: #45a049;
+    background-color: #0056b3;
   }
 
   &:disabled {
-    background: #ccc;
+    background-color: #ccc;
     cursor: not-allowed;
   }
 `;
 
-const LoadingMessage = styled.div`
-  text-align: center;
-  padding: 1rem;
+const InputContainer = styled.form`
+  display: flex;
+  gap: 8px;
+`;
+
+const MessageInfo = styled.div`
+  font-size: 0.8em;
   color: #666;
+  margin-bottom: 4px;
 `;
 
 const Chat: React.FC = () => {
-  const { messages, sendMessage, isLoading } = useChat();
+  const { messages, sendMessage } = useChat();
   const [newMessage, setNewMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -110,44 +79,31 @@ const Chat: React.FC = () => {
     scrollToBottom();
   }, [messages]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (newMessage.trim()) {
-      await sendMessage(newMessage);
+      sendMessage(newMessage);
       setNewMessage('');
     }
   };
 
-  if (isLoading) {
-    return (
-      <ChatContainer>
-        <LoadingMessage>Mesajlar yükleniyor...</LoadingMessage>
-      </ChatContainer>
-    );
-  }
-
   return (
     <ChatContainer>
       <MessagesContainer>
-        {messages.map((message) => {
-          const isOwnMessage = message.userId === auth.currentUser?.uid;
-          return (
-            <div key={message.id}>
-              <MessageInfo isOwnMessage={isOwnMessage}>
-                {isOwnMessage ? 'Sen' : message.userName}
-              </MessageInfo>
-              <MessageBubble isOwnMessage={isOwnMessage}>
-                {message.content}
-              </MessageBubble>
-            </div>
-          );
-        })}
+        {messages.map((message) => (
+          <div key={message.id}>
+            <MessageInfo>
+              {message.userName} - {new Date(message.timestamp).toLocaleTimeString()}
+            </MessageInfo>
+            <MessageBubble isCurrentUser={message.userId === user.displayName}>
+              {message.content}
+            </MessageBubble>
+          </div>
+        ))}
         <div ref={messagesEndRef} />
       </MessagesContainer>
-      
       <InputContainer onSubmit={handleSubmit}>
-        <Input
-          type="text"
+        <MessageInput
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
           placeholder="Mesajınızı yazın..."

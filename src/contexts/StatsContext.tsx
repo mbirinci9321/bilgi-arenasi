@@ -1,48 +1,19 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { collection, doc, onSnapshot, query, where, updateDoc } from 'firebase/firestore';
-import { db } from '../firebase';
 
-interface CategoryStats {
-  totalQuestions: number;
+interface Stat {
+  category: string;
   correctAnswers: number;
   wrongAnswers: number;
+  totalTime: number;
   averageTime: number;
   highestScore: number;
 }
 
-interface TeamStats {
-  totalGames: number;
-  totalScore: number;
-  winStreak: number;
-  bestWinStreak: number;
-  categories: {
-    [key: string]: CategoryStats;
-  };
-  lastPlayed: Date;
-}
-
 interface StatsContextType {
-  teamStats: TeamStats | null;
-  updateStats: (categoryId: string, stats: Partial<CategoryStats>) => Promise<void>;
-  isLoading: boolean;
+  stats: Stat[];
+  updateStats: (category: string, isCorrect: boolean, time: number, score: number) => void;
+  getCategoryStats: (category: string) => Stat | undefined;
 }
-
-const defaultStats: TeamStats = {
-  totalGames: 0,
-  totalScore: 0,
-  winStreak: 0,
-  bestWinStreak: 0,
-  categories: {},
-  lastPlayed: new Date()
-};
-
-const defaultCategoryStats: CategoryStats = {
-  totalQuestions: 0,
-  correctAnswers: 0,
-  wrongAnswers: 0,
-  averageTime: 0,
-  highestScore: 0
-};
 
 const StatsContext = createContext<StatsContextType | null>(null);
 
@@ -54,73 +25,62 @@ export const useStats = () => {
   return context;
 };
 
-export const StatsProvider: React.FC<{ children: React.ReactNode; teamId: string }> = ({
+export const StatsProvider: React.FC<{ children: React.ReactNode; teamId: string }> = ({ 
   children,
-  teamId
+  teamId 
 }) => {
-  const [teamStats, setTeamStats] = useState<TeamStats | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [stats, setStats] = useState<Stat[]>(() => {
+    const savedStats = localStorage.getItem(`stats_${teamId}`);
+    return savedStats ? JSON.parse(savedStats) : [];
+  });
 
   useEffect(() => {
-    if (!teamId) return;
+    localStorage.setItem(`stats_${teamId}`, JSON.stringify(stats));
+  }, [stats, teamId]);
 
-    const statsRef = doc(collection(db, 'teamStats'), teamId);
-    const unsubscribe = onSnapshot(statsRef, (doc) => {
-      if (doc.exists()) {
-        setTeamStats(doc.data() as TeamStats);
-      } else {
-        // Eğer istatistikler yoksa varsayılan değerleri kullan
-        setTeamStats(defaultStats);
+  const updateStats = (category: string, isCorrect: boolean, time: number, score: number) => {
+    setStats(prevStats => {
+      const existingStat = prevStats.find(stat => stat.category === category);
+      
+      if (existingStat) {
+        return prevStats.map(stat => {
+          if (stat.category === category) {
+            const totalTime = stat.totalTime + time;
+            const totalAnswers = stat.correctAnswers + stat.wrongAnswers + 1;
+            return {
+              ...stat,
+              correctAnswers: isCorrect ? stat.correctAnswers + 1 : stat.correctAnswers,
+              wrongAnswers: !isCorrect ? stat.wrongAnswers + 1 : stat.wrongAnswers,
+              totalTime,
+              averageTime: totalTime / totalAnswers,
+              highestScore: Math.max(stat.highestScore, score)
+            };
+          }
+          return stat;
+        });
       }
-      setIsLoading(false);
+
+      return [...prevStats, {
+        category,
+        correctAnswers: isCorrect ? 1 : 0,
+        wrongAnswers: isCorrect ? 0 : 1,
+        totalTime: time,
+        averageTime: time,
+        highestScore: score
+      }];
     });
+  };
 
-    return () => unsubscribe();
-  }, [teamId]);
-
-  const updateStats = async (categoryId: string, newStats: Partial<CategoryStats>) => {
-    if (!teamId || !teamStats) return;
-
-    const statsRef = doc(collection(db, 'teamStats'), teamId);
-    const currentCategoryStats = teamStats.categories[categoryId] || defaultCategoryStats;
-    
-    const updatedCategoryStats = {
-      ...currentCategoryStats,
-      ...newStats,
-      totalQuestions: currentCategoryStats.totalQuestions + 1,
-      averageTime: newStats.averageTime 
-        ? (currentCategoryStats.averageTime * currentCategoryStats.totalQuestions + newStats.averageTime) / (currentCategoryStats.totalQuestions + 1)
-        : currentCategoryStats.averageTime
-    };
-
-    const updatedStats = {
-      ...teamStats,
-      totalGames: teamStats.totalGames + 1,
-      totalScore: teamStats.totalScore + (newStats.correctAnswers ? 1 : 0),
-      lastPlayed: new Date(),
-      categories: {
-        ...teamStats.categories,
-        [categoryId]: updatedCategoryStats
-      }
-    };
-
-    // Kazanma serisini güncelle
-    if (newStats.correctAnswers) {
-      updatedStats.winStreak += 1;
-      updatedStats.bestWinStreak = Math.max(updatedStats.winStreak, updatedStats.bestWinStreak);
-    } else {
-      updatedStats.winStreak = 0;
-    }
-
-    await updateDoc(statsRef, updatedStats);
+  const getCategoryStats = (category: string) => {
+    return stats.find(stat => stat.category === category);
   };
 
   return (
     <StatsContext.Provider
       value={{
-        teamStats,
+        stats,
         updateStats,
-        isLoading
+        getCategoryStats
       }}
     >
       {children}
